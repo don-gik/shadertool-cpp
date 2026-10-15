@@ -80,3 +80,12 @@ set_target_properties(test_app PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "${slang_release_SOURCE_DIR}/lib"
 )
+
+# Set Install (for Rust cmake crate)
+include(GNUInstallDirs)
+
+install(TARGETS shadertool
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
