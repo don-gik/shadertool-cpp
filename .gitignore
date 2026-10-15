@@ -1,0 +1,6 @@
+# CMake stuffs
+build/
+
+# Cache or etc.
+.cache/
+*.spv
