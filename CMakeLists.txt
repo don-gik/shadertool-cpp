@@ -95,3 +95,17 @@ install(TARGETS shadertool
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+if(TARGET SPIRV-Tools-opt)
+    install(FILES $<TARGET_FILE:SPIRV-Tools-opt>
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        OPTIONAL
+    )
+endif()
+
+if(TARGET SPIRV-Tools)
+    install(FILES $<TARGET_FILE:SPIRV-Tools>
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        OPTIONAL
+    )
+endif()

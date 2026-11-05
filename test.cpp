@@ -187,7 +187,8 @@ int main() {
         "testModule",
         "test.slang",
         "computeMain",
-        true
+        true,
+        false
     );
     if (result.success) {
         std::cout << "[2] Shader Compilation SUCCESS!\n";

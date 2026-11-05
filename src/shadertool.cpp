@@ -388,7 +388,12 @@ namespace {
     };
 
     namespace optimizer {
-        std::vector<uint32_t> optimizeShader(const std::vector<uint32_t>& inputSpirv, const bool optimize, ErrorInfo* outErrorInfo) {
+        std::vector<uint32_t> optimizeShader(
+            const std::vector<uint32_t>& inputSpirv,
+            const bool optimize,
+            const bool highPrecision,
+            ErrorInfo* outErrorInfo
+        ) {
             if (outErrorInfo) {
                 *outErrorInfo = compile::kSuccessInfo;
             }
@@ -440,7 +445,31 @@ namespace {
     
             optimizer.RegisterLegalizationPasses();
             if (optimize) {
+                // Basic Stripping
+                optimizer.RegisterPass(spvtools::CreateStripDebugInfoPass());
+                optimizer.RegisterPass(spvtools::CreateStripNonSemanticInfoPass());
+                optimizer.RegisterPass(spvtools::CreateMergeReturnPass());
+                    
+                // Mem2Reg + Redundent Store Elimination
+                optimizer.RegisterPass(spvtools::CreateScalarReplacementPass());
+                optimizer.RegisterPass(spvtools::CreateLocalAccessChainConvertPass());
+                optimizer.RegisterPass(spvtools::CreateLocalSingleBlockLoadStoreElimPass());
+                optimizer.RegisterPass(spvtools::CreateLocalSingleStoreElimPass());
+                optimizer.RegisterPass(spvtools::CreateLocalMultiStoreElimPass());
+                
+                // Main Engine Performance Passes
                 optimizer.RegisterPerformancePasses();
+
+                // DCE + Branch
+                optimizer.RegisterPass(spvtools::CreateDeadBranchElimPass());
+                optimizer.RegisterPass(spvtools::CreateAggressiveDCEPass());
+
+                // Floating Point Quant
+                if (!highPrecision) {
+                    optimizer.RegisterPass(spvtools::CreateConvertRelaxedToHalfPass());
+                }
+                
+                optimizer.RegisterPass(spvtools::CreateCompactIdsPass());
             }
     
             std::vector<uint32_t> optimizedSpirv;
@@ -493,7 +522,8 @@ extern "C" {
         const char* moduleName,
         const char* modulePath,
         const char* entryPoint,
-        const bool shouldOptimize
+        const bool shouldOptimize,
+        const bool highPrecision
     ) {
         // Check if ctx is valid
         if (!ctx || !ctx->globalSession) {
@@ -600,7 +630,7 @@ extern "C" {
         // Optimize spirv
 
         ErrorInfo optErrorInfo = compile::kSuccessInfo;
-        std::vector<uint32_t> optimizedSpirv = optimizer::optimizeShader(inputSpirv, shouldOptimize, &optErrorInfo);
+        std::vector<uint32_t> optimizedSpirv = optimizer::optimizeShader(inputSpirv, shouldOptimize, highPrecision, &optErrorInfo);
 
         if (optErrorInfo.code != SHADERTOOL_OK) {
             CompileResult failResult = {};

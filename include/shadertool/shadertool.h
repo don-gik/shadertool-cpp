@@ -17,7 +17,8 @@ CompileResult shadertool_compile_shader(
     const char* moduleName,
     const char* modulePath,
     const char* entryPoint,
-    const bool shouldOptimize
+    const bool shouldOptimize,
+    const bool highPrecision
 );
 
 void shadertool_free_compile_result(CompileResult* result);
