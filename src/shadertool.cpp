@@ -3,10 +3,12 @@
 #include <slang-com-ptr.h>
 #include <slang.h>
 #include "shadertool/shadertool_types.h"
+#include "spirv-tools/optimizer.hpp"
 
 #include <array>
 #include <fstream>
 #include <iostream>
+#include <spirv-tools/libspirv.h>
 #include <string>
 #include <iterator>
 #include <cstring>
@@ -384,6 +386,91 @@ namespace {
             return resourceList;
         }
     };
+
+    namespace optimizer {
+        std::vector<uint32_t> optimizeShader(const std::vector<uint32_t>& inputSpirv, const bool optimize, ErrorInfo* outErrorInfo) {
+            if (outErrorInfo) {
+                *outErrorInfo = compile::kSuccessInfo;
+            }
+            
+            spv_target_env targetEnvironment = SPV_ENV_VULKAN_1_3;
+            spvtools::Optimizer optimizer(targetEnvironment);
+    
+            std::string accumulatedMessages;
+            int32_t firstLine = -1;
+            int32_t firstCol = -1;
+
+            optimizer.SetMessageConsumer([&accumulatedMessages, &firstLine, &firstCol](
+                spv_message_level_t level, 
+                const char* source, 
+                const spv_position_t& position, 
+                const char* message
+            ) {
+                const char* levelTag = "[INFO]";
+                switch (level) {
+                    case SPV_MSG_FATAL:          levelTag = "[FATAL]"; break;
+                    case SPV_MSG_INTERNAL_ERROR: levelTag = "[INTERNAL_ERROR]"; break;
+                    case SPV_MSG_ERROR:          levelTag = "[ERROR]"; break;
+                    case SPV_MSG_WARNING:        levelTag = "[WARNING]"; break;
+                    case SPV_MSG_INFO:           levelTag = "[INFO]"; break;
+                    case SPV_MSG_DEBUG:          levelTag = "[DEBUG]"; break;
+                }
+    
+                if (!accumulatedMessages.empty()) {
+                    accumulatedMessages += "\n";
+                }
+    
+                std::string formattedMsg = levelTag;
+                if (position.line > 0) {
+                    formattedMsg += " Line " + std::to_string(position.line);
+                    if (position.column > 0) {
+                        formattedMsg += ", Col " + std::to_string(position.column);
+                    }
+                }
+                formattedMsg += ": ";
+                formattedMsg += message;
+    
+                accumulatedMessages += formattedMsg;
+    
+                if (firstLine == -1 && position.line > 0) {
+                    firstLine = static_cast<int32_t>(position.line);
+                    firstCol = static_cast<int32_t>(position.column);
+                }
+            });
+    
+            optimizer.RegisterLegalizationPasses();
+            if (optimize) {
+                optimizer.RegisterPerformancePasses();
+            }
+    
+            std::vector<uint32_t> optimizedSpirv;
+            bool success = optimizer.Run(
+                inputSpirv.data(),
+                inputSpirv.size(),
+                &optimizedSpirv
+            );
+    
+            if (outErrorInfo) {
+                if (!success) {
+                    outErrorInfo->code = SHADERTOOL_ERROR_OPTIMIZATION_FAILED;
+                } else {
+                    outErrorInfo->code = SHADERTOOL_OK;
+                }
+    
+                if (!accumulatedMessages.empty()) {
+                    outErrorInfo->message = error_util::duplicateString(accumulatedMessages);
+                    outErrorInfo->line = firstLine;
+                    outErrorInfo->column = firstCol;
+                }
+            }
+    
+            if (!success) {
+                return inputSpirv;
+            }
+    
+            return optimizedSpirv;
+        }
+    };
 };
 
 extern "C" {
@@ -405,7 +492,8 @@ extern "C" {
         Context* ctx,
         const char* moduleName,
         const char* modulePath,
-        const char* entryPoint
+        const char* entryPoint,
+        const bool shouldOptimize
     ) {
         // Check if ctx is valid
         if (!ctx || !ctx->globalSession) {
@@ -503,10 +591,29 @@ extern "C" {
             }
         }
 
-        size_t spirvCodeSize = spirvCode->getBufferSize();
-        uint8_t* spirvCodeBuf = new uint8_t[spirvCodeSize];
-        std::memcpy(spirvCodeBuf, spirvCode->getBufferPointer(), spirvCodeSize);
+        size_t rawSize = spirvCode->getBufferSize();
+        const uint32_t* spirvWords = reinterpret_cast<const uint32_t*>(spirvCode->getBufferPointer());
+        size_t wordCount = rawSize / sizeof(uint32_t);
+        std::vector<uint32_t> inputSpirv(spirvWords, spirvWords + wordCount);
 
+        // ----------------------------------------------------------------
+        // Optimize spirv
+
+        ErrorInfo optErrorInfo = compile::kSuccessInfo;
+        std::vector<uint32_t> optimizedSpirv = optimizer::optimizeShader(inputSpirv, shouldOptimize, &optErrorInfo);
+
+        if (optErrorInfo.code != SHADERTOOL_OK) {
+            CompileResult failResult = {};
+            failResult.success = false;
+            failResult.errorInfo = optErrorInfo;
+            failResult.errorInfo.filePath = error_util::duplicateString(modulePath);
+            return failResult;
+        }
+
+        size_t spirvCodeSize = optimizedSpirv.size() * sizeof(uint32_t);
+        uint8_t* spirvCodeBuf = new uint8_t[spirvCodeSize];
+        std::memcpy(spirvCodeBuf, optimizedSpirv.data(), spirvCodeSize);
+        
         // ----------------------------------------------------------------
         // Get dependencies
         size_t depCount = static_cast<size_t>(module->getDependencyFileCount());
@@ -557,6 +664,15 @@ extern "C" {
         if (result->errorInfo.filePath) {
             delete[] result->errorInfo.filePath;
             result->errorInfo.filePath = nullptr;
+        }
+
+        if (result->optimInfo.message) {
+            delete[] result->optimInfo.message;
+            result->optimInfo.message = nullptr;
+        }
+        if (result->optimInfo.filePath) {
+            delete[] result->optimInfo.filePath;
+            result->optimInfo.filePath = nullptr;
         }
 
         // Delete codeBytes

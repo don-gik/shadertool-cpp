@@ -18,6 +18,7 @@ typedef enum ErrorCode {
     SHADERTOOL_ERROR_FILE_NOT_FOUND,
     SHADERTOOL_ERROR_SYNTAX_ERROR,
     SHADERTOOL_ERROR_LINK_ERROR,
+    SHADERTOOL_ERROR_OPTIMIZATION_FAILED,
     SHADERTOOL_ERROR_INTERNAL,
     SHADERTOOL_ERROR_UNKNOWN = 9999
 } ErrorCode;
@@ -92,6 +93,7 @@ struct CompactResource {
 typedef struct CompileResult {
     bool success;
     ErrorInfo errorInfo;
+    ErrorInfo optimInfo;
 
     const uint8_t* codeBytes;
     size_t codeSize;

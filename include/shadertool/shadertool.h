@@ -16,7 +16,8 @@ CompileResult shadertool_compile_shader(
     Context* ctx,
     const char* moduleName,
     const char* modulePath,
-    const char* entryPoint
+    const char* entryPoint,
+    const bool shouldOptimize
 );
 
 void shadertool_free_compile_result(CompileResult* result);

@@ -58,6 +58,8 @@ find_package(slang REQUIRED CONFIG
     NO_DEFAULT_PATH
 )
 
+find_package(SPIRV-Tools REQUIRED)
+
 # ----------------------------------------------------------------
 
 # Create library
@@ -69,7 +71,11 @@ target_include_directories(shadertool PUBLIC
 )
 
 # Fetch slang libraries
-target_link_libraries(shadertool PUBLIC slang::slang)
+target_link_libraries(shadertool PUBLIC 
+    slang::slang
+    SPIRV-Tools-opt
+    SPIRV-Tools
+)
 
 # Test executable
 add_executable(test_app test.cpp)
