@@ -167,6 +167,18 @@ namespace {
             for (uint32_t i = 0; i < fieldCount; ++i) {
                 slang::VariableLayoutReflection* fieldVar = typeLayout->getFieldByIndex(i);
                 slang::TypeLayoutReflection* fieldType = fieldVar->getTypeLayout();
+
+                // Ignore SV_GroupThreadID, SV_GroupID
+                if (fieldVar->getSemanticName() != nullptr) {
+                    continue;
+                }
+
+                // Ignore system builtin variables
+                slang::ParameterCategory cat = fieldVar->getCategory();
+                if (cat == slang::ParameterCategory::VaryingInput ||
+                    cat == slang::ParameterCategory::VaryingOutput) {
+                    continue;
+                }
     
                 const char* rawName = fieldVar->getName();
     
@@ -372,6 +384,14 @@ namespace {
             for (SlangInt e = 0; e < entryCount; ++e) {
                 slang::EntryPointLayout* entryPoint = programLayout->getEntryPointByIndex(e);
                 if (!entryPoint) continue;
+
+                slang::VariableLayoutReflection* epVarLayout = entryPoint->getVarLayout();
+                if (epVarLayout) {
+                    CompactResource epRes = {};
+                    if (parseResourceVariable(epVarLayout, epRes)) {
+                        resourceList.push_back(epRes);
+                    }
+                }
     
                 SlangInt paramCount = entryPoint->getParameterCount();
                 for (SlangInt p = 0; p < paramCount; ++p) {

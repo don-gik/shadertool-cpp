@@ -185,8 +185,8 @@ int main() {
     CompileResult result = shadertool_compile_shader(
         ctx,
         "testModule",
-        "test.slang",
-        "computeMain",
+        "test2.slang",
+        "gemm",
         true,
         false
     );
