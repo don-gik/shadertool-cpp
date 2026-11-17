@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <vector>
 
 inline const char* resourceKindToString(ResourceKind kind) {
     switch (kind) {
@@ -182,11 +183,16 @@ int main() {
     }
     std::cout << "[1] Context created successfully.\n";
 
+    std::vector<SlangProfile> profiles;
+    profiles.push_back(SlangProfile::SLANG_PROFILE_SPIRV_1_6);
+    
     CompileResult result = shadertool_compile_shader(
         ctx,
         "testModule",
         "test2.slang",
         "gemm",
+        profiles.data(),
+        profiles.size(),
         true,
         false
     );

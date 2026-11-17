@@ -13,6 +13,24 @@ extern "C" {
 
 typedef struct Context Context;
 
+typedef enum SlangProfile {
+    SLANG_PROFILE_SPIRV_1_5 = 0,
+    SLANG_PROFILE_SPIRV_1_6 = 1,
+
+    // Subgroup / Wave Capabilities
+    SLANG_PROFILE_SPV_GROUP_NON_UNIFORM = 100,
+    SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_VOTE = 101,
+    SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_ARITHMETIC = 102,
+    SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_BALLOT = 103,
+    SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_SHUFFLE = 104,
+    SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_SHUFFLE_RELATIVE = 105,
+
+    // Hardware Matrix / Precision Capabilities
+    SLANG_PROFILE_SPV_COOPERATIVE_MATRIX_KHR = 200,
+    SLANG_PROFILE_SPV_FLOAT16 = 201,
+    SLANG_PROFILE_SPV_INT64 = 202,
+} SlangProfile;
+
 typedef enum ErrorCode {
     SHADERTOOL_OK = 0,
     SHADERTOOL_ERROR_FILE_NOT_FOUND,
@@ -94,6 +112,8 @@ typedef struct CompileResult {
     bool success;
     ErrorInfo errorInfo;
     ErrorInfo optimInfo;
+
+    const char* warningMessage;
 
     const uint8_t* codeBytes;
     size_t codeSize;

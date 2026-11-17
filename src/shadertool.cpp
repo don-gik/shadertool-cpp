@@ -19,6 +19,25 @@ struct Context {
 };
 
 namespace {
+    static std::string blobToString(slang::IBlob* blob) {
+        if (!blob || blob->getBufferSize() == 0) return "";
+        const char* ptr = static_cast<const char*>(blob->getBufferPointer());
+        size_t len = blob->getBufferSize();
+        while (len > 0 && ptr[len - 1] == '\0') {
+            --len;
+        }
+        return std::string(ptr, len);
+    }
+
+    static void appendDiagnostic(std::string& dst, slang::IBlob* blob) {
+        std::string msg = blobToString(blob);
+        if (msg.empty()) return;
+        if (!dst.empty() && dst.back() != '\n') {
+            dst += '\n';
+        }
+        dst += msg;
+    }
+
     namespace fileio {
         std::string readSourceString(const char* sourcePath) {
             std::ifstream file(sourcePath);
@@ -98,28 +117,65 @@ namespace {
             
             return s_globalSession;
         }
+
+        static const char* capabilityToName(SlangProfile p) {
+            switch (p) {
+                case SLANG_PROFILE_SPV_GROUP_NON_UNIFORM:                  return "spvGroupNonUniform";
+                case SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_VOTE:             return "spvGroupNonUniformVote";
+                case SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_ARITHMETIC:       return "spvGroupNonUniformArithmetic";
+                case SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_BALLOT:           return "spvGroupNonUniformBallot";
+                case SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_SHUFFLE:          return "spvGroupNonUniformShuffle";
+                case SLANG_PROFILE_SPV_GROUP_NON_UNIFORM_SHUFFLE_RELATIVE: return "spvGroupNonUniformShuffleRelative";
+                case SLANG_PROFILE_SPV_COOPERATIVE_MATRIX_KHR:             return "spvCooperativeMatrixKHR";
+                case SLANG_PROFILE_SPV_FLOAT16:                            return "spvFloat16";
+                case SLANG_PROFILE_SPV_INT64:                              return "spvInt64";
+                default:                                                   return nullptr;
+            }
+        }
         
-        Slang::ComPtr<slang::ISession> createSession(Context* ctx) {
+        Slang::ComPtr<slang::ISession> createSession(Context* ctx, const SlangProfile* profiles, size_t profileCount, std::string& outError) {
+            SlangProfileID baseProfile = ctx->globalSession->findProfile("spirv_1_6");
+
+            std::vector<slang::CompilerOptionEntry> options;
+            options.push_back({
+                slang::CompilerOptionName::EmitSpirvDirectly,
+                {slang::CompilerOptionValueKind::Int, 1, 0, nullptr, nullptr}
+            });
+            
+            for (size_t i = 0; i < profileCount; ++i) {
+                SlangProfile item = profiles[i];
+                if (item == SLANG_PROFILE_SPIRV_1_5) {
+                    baseProfile = ctx->globalSession->findProfile("spirv_1_5");
+                } else if (item == SLANG_PROFILE_SPIRV_1_6) {
+                    baseProfile = ctx->globalSession->findProfile("spirv_1_6");
+                } else if (const char* capName = capabilityToName(item)) {
+                    SlangCapabilityID capId = ctx->globalSession->findCapability(capName);
+                    if (capId == SLANG_CAPABILITY_UNKNOWN) {
+                        outError = std::string("Slang runtime does not support capability: ") + capName;
+                        return nullptr;
+                    }
+                    options.push_back({
+                        slang::CompilerOptionName::Capability,
+                        {slang::CompilerOptionValueKind::Int, static_cast<int32_t>(capId), 0, nullptr, nullptr}
+                    });
+                }
+            }
+            
             slang::TargetDesc targetDesc = {};
             targetDesc.format = SLANG_SPIRV;
-            targetDesc.profile = ctx->globalSession->findProfile("spirv_1_6");
-        
-            std::array<slang::CompilerOptionEntry, 1> options = {
-                {
-                    slang::CompilerOptionName::EmitSpirvDirectly,
-                    {slang::CompilerOptionValueKind::Int, 1, 0, nullptr, nullptr}
-                }
-            };
-        
+            targetDesc.profile = baseProfile;
+    
             slang::SessionDesc sessionDesc = {};
             sessionDesc.targets = &targetDesc;
             sessionDesc.targetCount = 1;
             sessionDesc.compilerOptionEntries = options.data();
-            sessionDesc.compilerOptionEntryCount = options.size();
-        
+            sessionDesc.compilerOptionEntryCount = static_cast<uint32_t>(options.size());
+    
             Slang::ComPtr<slang::ISession> session;
             ctx->globalSession->createSession(sessionDesc, session.writeRef());
-        
+            if (!session) {
+                outError = "Failed to create Slang Session";
+            }
             return session;
         }
     
@@ -542,6 +598,8 @@ extern "C" {
         const char* moduleName,
         const char* modulePath,
         const char* entryPoint,
+        const SlangProfile* profiles,
+        const size_t profileCount,
         const bool shouldOptimize,
         const bool highPrecision
     ) {
@@ -552,10 +610,13 @@ extern "C" {
 
         // ----------------------------------------------------------------
         // Create session
-        auto session = compile::createSession(ctx);
+        std::string sessionError;
+        auto session = compile::createSession(ctx, profiles, profileCount, sessionError);
         if (!session) {
             return error_util::makeError(SHADERTOOL_ERROR_INTERNAL, "Failed to create Slang Session");
         }
+
+        std::string accumulatedWarnings;
 
         // ----------------------------------------------------------------
         // Create diagnostics
@@ -563,16 +624,15 @@ extern "C" {
         {
             Slang::ComPtr<slang::IBlob> diagnostics;
             module = compile::createModule(ctx, session.get(), moduleName, modulePath, diagnostics);
-    
-            // If module is not created, and diagnostics size is 0 -> File not found
-            if (!module && (!diagnostics || diagnostics->getBufferSize() == 0)) {
-                return error_util::makeError(SHADERTOOL_ERROR_FILE_NOT_FOUND, "Failed to open or read shader file", modulePath);
-            }
-            // If module is not created, and diagnostics size > 0 -> Syntax error
-            if (!module || (diagnostics && diagnostics->getBufferSize() > 0)) {
-                std::string diagMsg = diagnostics ? static_cast<const char*>(diagnostics->getBufferPointer()) : "Unknown module error";
+
+            if (!module) {
+                std::string diagMsg = blobToString(diagnostics);
+                if (diagMsg.empty()) {
+                    return error_util::makeError(SHADERTOOL_ERROR_FILE_NOT_FOUND, "Failed to open or read shader file", modulePath);
+                }
                 return error_util::makeError(SHADERTOOL_ERROR_SYNTAX_ERROR, diagMsg, modulePath);
             }
+            appendDiagnostic(accumulatedWarnings, diagnostics);
         }
         
         // ----------------------------------------------------------------
@@ -604,23 +664,22 @@ extern "C" {
             );
 
             if (SLANG_FAILED(result)) {
-                std::string diagMsg = diagnostics ? static_cast<const char*>(diagnostics->getBufferPointer()) : "Linking failed";
-                return error_util::makeError(SHADERTOOL_ERROR_LINK_ERROR, diagMsg, modulePath);
+                std::string diagMsg = blobToString(diagnostics);
+                return error_util::makeError(SHADERTOOL_ERROR_LINK_ERROR, diagMsg.empty() ? "Composition failed" : diagMsg, modulePath);
             }
+            appendDiagnostic(accumulatedWarnings, diagnostics);
         }
 
         Slang::ComPtr<slang::IComponentType> linkedProgram;
         {
             Slang::ComPtr<slang::IBlob> diagnostics;
-            SlangResult result = composedProgram->link(
-                linkedProgram.writeRef(),
-                diagnostics.writeRef()
-            );
+            SlangResult result = composedProgram->link(linkedProgram.writeRef(), diagnostics.writeRef());
 
             if (SLANG_FAILED(result)) {
-                std::string diagMsg = diagnostics ? static_cast<const char*>(diagnostics->getBufferPointer()) : "Linking failed";
-                return error_util::makeError(SHADERTOOL_ERROR_LINK_ERROR, diagMsg, modulePath);
+                std::string diagMsg = blobToString(diagnostics);
+                return error_util::makeError(SHADERTOOL_ERROR_LINK_ERROR, diagMsg.empty() ? "Linking failed" : diagMsg, modulePath);
             }
+            appendDiagnostic(accumulatedWarnings, diagnostics);
         }
         
         // ----------------------------------------------------------------
@@ -628,17 +687,13 @@ extern "C" {
         Slang::ComPtr<slang::IBlob> spirvCode;
         {
             Slang::ComPtr<slang::IBlob> diagnostics;
-            SlangResult result = linkedProgram->getEntryPointCode(
-                0,  // entryPointIndex
-                0,  // targetIndex
-                spirvCode.writeRef(),
-                diagnostics.writeRef()
-            );
+            SlangResult result = linkedProgram->getEntryPointCode(0, 0, spirvCode.writeRef(), diagnostics.writeRef());
 
-            if (SLANG_FAILED(result)) {
-                std::string diagMsg = diagnostics ? static_cast<const char*>(diagnostics->getBufferPointer()) : "Linking failed";
-                return error_util::makeError(SHADERTOOL_ERROR_LINK_ERROR, diagMsg, modulePath);
+            if (SLANG_FAILED(result) || !spirvCode) {
+                std::string diagMsg = blobToString(diagnostics);
+                return error_util::makeError(SHADERTOOL_ERROR_LINK_ERROR, diagMsg.empty() ? "Codegen failed" : diagMsg, modulePath);
             }
+            appendDiagnostic(accumulatedWarnings, diagnostics);
         }
 
         size_t rawSize = spirvCode->getBufferSize();
@@ -690,6 +745,9 @@ extern "C" {
         CompileResult compileResult = {
             .success = true,
             .errorInfo = compile::kSuccessInfo,
+            .warningMessage = accumulatedWarnings.empty()
+                ? nullptr
+                : error_util::duplicateString(accumulatedWarnings),
             
             .codeBytes = spirvCodeBuf,
             .codeSize = spirvCodeSize,
@@ -714,6 +772,10 @@ extern "C" {
         if (result->errorInfo.filePath) {
             delete[] result->errorInfo.filePath;
             result->errorInfo.filePath = nullptr;
+        }
+        if (result->warningMessage) {
+            delete[] result->warningMessage;
+            result->warningMessage = nullptr;
         }
 
         if (result->optimInfo.message) {

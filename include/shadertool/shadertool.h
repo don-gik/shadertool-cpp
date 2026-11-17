@@ -17,6 +17,8 @@ CompileResult shadertool_compile_shader(
     const char* moduleName,
     const char* modulePath,
     const char* entryPoint,
+    const SlangProfile* profiles,
+    const size_t profileCount,
     const bool shouldOptimize,
     const bool highPrecision
 );
