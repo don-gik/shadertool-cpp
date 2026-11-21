@@ -186,26 +186,26 @@ int main() {
     std::vector<SlangProfile> profiles;
     profiles.push_back(SlangProfile::SLANG_PROFILE_SPIRV_1_6);
     
-    // CompileResult result = shadertool_compile_shader(
-    //     ctx,
-    //     "testModule",
-    //     "test.slang",
-    //     "computeMain",
-    //     profiles.data(),
-    //     profiles.size(),
-    //     true,
-    //     false
-    // );
     CompileResult result = shadertool_compile_shader(
         ctx,
         "testModule",
-        "test2.slang",
-        "gemm",
+        "test.slang",
+        "computeMain",
         profiles.data(),
         profiles.size(),
         true,
         false
     );
+    // CompileResult result = shadertool_compile_shader(
+    //     ctx,
+    //     "testModule",
+    //     "test2.slang",
+    //     "gemm",
+    //     profiles.data(),
+    //     profiles.size(),
+    //     true,
+    //     false
+    // );
     if (result.success) {
         std::cout << "[2] Shader Compilation SUCCESS!\n";
         std::cout << "    - SPIR-V Code Size: " << result.codeSize << " bytes\n";

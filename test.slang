@@ -29,7 +29,7 @@ struct PushConstants {
     float4x4 modelMatrix;
     
     // BDA Pointer
-    RawVertex* vertexBufferPtr; 
+    RawVertex** vertexBufferPtr; 
     
     uint materialCount;
     float globalAlpha;
@@ -60,7 +60,7 @@ RWTexture2D<float4> gOutputImage;
 void computeMain(uint3 threadId : SV_DispatchThreadID)
 {
     if (gPushConstants.vertexBufferPtr != nullptr) {
-        RawVertex v = gPushConstants.vertexBufferPtr[threadId.x];
+        RawVertex v = *gPushConstants.vertexBufferPtr[threadId.x];
     }
 
     float2 uv = float2(threadId.xy) / 1024.0;

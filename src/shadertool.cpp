@@ -291,15 +291,34 @@ namespace {
                 }
 
                 int32_t myIndex = static_cast<int32_t>(outMembers.size());
-                outMembers.push_back(member);
+                outMembers.push_back(std::move(member));
 
                 if (member.kind == MEMBER_KIND_STRUCT) {
                     // Struct -> recursively parse members
                     extractMemberRecursive(targetLayout, member.offset, myIndex, outMembers);
                 } else if (member.kind == MEMBER_KIND_POINTER) {
                     // BDA -> then start with offset 0, relative offset.
-                    if (auto elemLayout = targetLayout->getElementTypeLayout()) {
-                        extractMemberRecursive(elemLayout, 0, myIndex, outMembers);
+                    // Added recursive pointer handling here
+                    if (targetLayout->getKind() == slang::TypeReflection::Kind::Pointer) {
+                        CompactMember inner = {};
+                        inner.name = error_util::duplicateString(member.name);
+                        inner.kind = MEMBER_KIND_POINTER;
+                        inner.size = static_cast<uint32_t>(targetLayout->getSize(SLANG_PARAMETER_CATEGORY_UNIFORM));
+                        inner.offset = 0;
+                        inner.parentIndex = myIndex;
+                        inner.arrayCount = 0;
+                        inner.scalarType = SCALAR_KIND_NONE;
+                        inner.rowCount = 1;
+                        inner.colCount = 1;
+
+                        int32_t innerIdx = static_cast<int32_t>(outMembers.size());
+                        outMembers.push_back(inner);
+                        
+                        extractMemberRecursive(
+                            targetLayout->getElementTypeLayout(), 0, innerIdx, outMembers
+                        );
+                    } else {
+                        extractMemberRecursive(targetLayout, 0, myIndex, outMembers);
                     }
                 }
             }
