@@ -261,6 +261,13 @@ namespace {
 
                 if (kind == slang::TypeReflection::Kind::Pointer) {
                     member.kind = MEMBER_KIND_POINTER; // BDA
+                    // If BDA - swaps type into element also.
+
+                    slang::TypeLayoutReflection* elemLayout = targetLayout->getElementTypeLayout();
+                    if (elemLayout) {
+                        targetLayout = elemLayout;
+                        kind = elemLayout->getKind();
+                    }
                 } else if (kind == slang::TypeReflection::Kind::Struct) {
                     member.kind = MEMBER_KIND_STRUCT;  // Struct
                 } else {

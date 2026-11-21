@@ -7,9 +7,9 @@ void gemm(
     uint3 thread_idx: SV_GroupThreadID,
     uint3 block_idx: SV_GroupID,
     
-    uniform float* A,
+    uniform float4* A,
     uniform float* B,
-    uniform float* C,
+    uniform float4* C,
     uniform uint M,
     uniform uint N,
     uniform uint K,
@@ -20,7 +20,7 @@ void gemm(
     const uint y = block_idx.y * BLOCKDIM.y + thread_idx.y;
 
     if (x < M && y < N) {
-        float tmp = 0.0;
+        float4 tmp = 0.0;
 
         for (int i = 0; i < K; ++i) {
             tmp += A[x * K + i] * B[i * N + y];

@@ -59,12 +59,10 @@ RWTexture2D<float4> gOutputImage;
 [numthreads(16, 16, 1)]
 void computeMain(uint3 threadId : SV_DispatchThreadID)
 {
-    // BDA 포인터 디레퍼런싱 테스트
     if (gPushConstants.vertexBufferPtr != nullptr) {
         RawVertex v = gPushConstants.vertexBufferPtr[threadId.x];
     }
 
-    // 텍스처 샘플링 & Storage Image 쓰기
     float2 uv = float2(threadId.xy) / 1024.0;
     float4 sampledColor = gAlbedoMap.Sample(gLinearSampler, uv);
     

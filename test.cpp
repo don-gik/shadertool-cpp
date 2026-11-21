@@ -186,6 +186,16 @@ int main() {
     std::vector<SlangProfile> profiles;
     profiles.push_back(SlangProfile::SLANG_PROFILE_SPIRV_1_6);
     
+    // CompileResult result = shadertool_compile_shader(
+    //     ctx,
+    //     "testModule",
+    //     "test.slang",
+    //     "computeMain",
+    //     profiles.data(),
+    //     profiles.size(),
+    //     true,
+    //     false
+    // );
     CompileResult result = shadertool_compile_shader(
         ctx,
         "testModule",
