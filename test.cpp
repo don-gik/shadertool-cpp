@@ -7,12 +7,14 @@
 
 inline const char* resourceKindToString(ResourceKind kind) {
     switch (kind) {
-        case RESOURCE_KIND_PUSH_CONSTANT:   return "Push Constant";
-        case RESOURCE_KIND_UNIFORM:         return "Uniform Buffer (UBO)";
-        case RESOURCE_KIND_TEXTURE:         return "Sampled Texture";
-        case RESOURCE_KIND_SAMPLER:         return "Sampler";
-        case RESOURCE_KIND_STORAGE_TEXTURE: return "Storage Texture (RW)";
-        default:                          return "Unknown";
+        case RESOURCE_KIND_PUSH_CONSTANT:       return "Push Constant";
+        case RESOURCE_KIND_UNIFORM:             return "Uniform Buffer (UBO)";
+        case RESOURCE_KIND_STORAGE_BUFFER:      return "Structed Buffer";
+        case RESOURCE_KIND_STORAGE_BUFFER_RW:   return "Structed Buffer (RW)";
+        case RESOURCE_KIND_TEXTURE:             return "Sampled Texture";
+        case RESOURCE_KIND_SAMPLER:             return "Sampler";
+        case RESOURCE_KIND_STORAGE_TEXTURE:     return "Storage Texture (RW)";
+        default:                                return "Unknown";
     }
 }
 

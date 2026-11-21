@@ -54,6 +54,9 @@ SamplerState gLinearSampler;
 [[vk::binding(0, 1)]] 
 RWTexture2D<float4> gOutputImage;
 
+[[vk::binding(1, 1)]]
+RWStructuredBuffer<float> a;
+
 
 [shader("compute")]
 [numthreads(16, 16, 1)]

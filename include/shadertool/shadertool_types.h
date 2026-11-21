@@ -51,10 +51,12 @@ typedef struct ErrorInfo {
 
 typedef enum ResourceKind : uint8_t {
     RESOURCE_KIND_PUSH_CONSTANT = 0,
-    RESOURCE_KIND_UNIFORM = 1,
-    RESOURCE_KIND_TEXTURE = 2,         // Texture2D, TextureCube
-    RESOURCE_KIND_SAMPLER = 3,         // SamplerState
-    RESOURCE_KIND_STORAGE_TEXTURE = 4  // RWTexture2D
+    RESOURCE_KIND_UNIFORM = 1,              // ConstantBuffer<T> -> UNIFORM_BUFFER
+    RESOURCE_KIND_STORAGE_BUFFER = 2,       // StructuredBuffer<T>, ByteAddressBuffer -> STORAGE_BUFFER (Read)
+    RESOURCE_KIND_STORAGE_BUFFER_RW = 3,    // RWStructuredBuffer<T>, RWByteAddressBuffer -> STORAGE_BUFFER (Read/Write)
+    RESOURCE_KIND_TEXTURE = 4,              // Texture2D, TextureCube
+    RESOURCE_KIND_SAMPLER = 5,              // SamplerState
+    RESOURCE_KIND_STORAGE_TEXTURE = 6       // RWTexture2D
 } ResourceKind;
 
 typedef enum ScalarKind : uint8_t {

@@ -355,66 +355,82 @@ namespace {
             CompactResource& outResource
         ) {
             if (!varLayout) return false;
-
+        
             slang::TypeLayoutReflection* typeLayout = varLayout->getTypeLayout();
             if (!typeLayout) return false;
-
-            // If the var is container
+        
             slang::VariableLayoutReflection* bindingVar = varLayout;
             if (auto containerVar = typeLayout->getContainerVarLayout()) {
                 bindingVar = containerVar;
             }
-
-            // Check category of binding var
+        
             CategoryInfo catInfo = inspectVariableCategories(bindingVar);
-            
+        
             slang::TypeReflection::Kind kind = typeLayout->getKind();
-            bool isContainer = (kind == slang::TypeReflection::Kind::ConstantBuffer ||
-                                kind == slang::TypeReflection::Kind::ParameterBlock ||
-                                kind == slang::TypeReflection::Kind::TextureBuffer ||
-                                kind == slang::TypeReflection::Kind::ShaderStorageBuffer);
+            bool isConstantBuffer = (kind == slang::TypeReflection::Kind::ConstantBuffer ||
+                                     kind == slang::TypeReflection::Kind::ParameterBlock);
+            bool isStorageBufferBlock = (kind == slang::TypeReflection::Kind::ShaderStorageBuffer);
             bool isResource = (kind == slang::TypeReflection::Kind::Resource);
             bool isSampler = (kind == slang::TypeReflection::Kind::SamplerState);
-
-            // Check if push constant
-            bool isPushConstant = catInfo.isPushConstant;
-            bool isUniform = !isPushConstant && isContainer;
         
-            if (!isPushConstant && !isUniform && !isResource && !isSampler) {
+            bool isPushConstant = catInfo.isPushConstant;
+            bool isUniform = !isPushConstant && isConstantBuffer;
+        
+            if (!isPushConstant && !isUniform && !isStorageBufferBlock && !isResource && !isSampler) {
                 return false;
             }
-
-            // Set the CompactResource
+        
             const char* varName = varLayout->getName();
             outResource.name = error_util::duplicateString(varName ? varName : "$Globals");
-
+            outResource.set = static_cast<uint32_t>(
+                bindingVar->getBindingSpace(slang::ParameterCategory::DescriptorTableSlot)
+            );
+            outResource.binding = static_cast<uint32_t>(bindingVar->getBindingIndex());
+        
+            bool hasStructMembers = false;
+        
             if (isPushConstant) {
                 outResource.kind = RESOURCE_KIND_PUSH_CONSTANT;
                 outResource.set = 0;
                 outResource.binding = 0;
+                hasStructMembers = true;
             } else if (isUniform) {
-                    outResource.kind = RESOURCE_KIND_UNIFORM;
-                    outResource.set = static_cast<uint32_t>(bindingVar->getBindingSpace(slang::ParameterCategory::DescriptorTableSlot));
-                    outResource.binding = static_cast<uint32_t>(bindingVar->getBindingIndex());
+                outResource.kind = RESOURCE_KIND_UNIFORM;
+                hasStructMembers = true;
+            } else if (isStorageBufferBlock) {
+                outResource.kind = RESOURCE_KIND_STORAGE_BUFFER_RW;
+                hasStructMembers = true;
             } else if (isSampler) {
                 outResource.kind = RESOURCE_KIND_SAMPLER;
-                outResource.set = static_cast<uint32_t>(bindingVar->getBindingSpace(slang::ParameterCategory::DescriptorTableSlot));
-                outResource.binding = static_cast<uint32_t>(bindingVar->getBindingIndex());
             } else if (isResource) {
                 SlangResourceAccess access = typeLayout->getResourceAccess();
-                outResource.kind = (access == SLANG_RESOURCE_ACCESS_READ_WRITE || access == SLANG_RESOURCE_ACCESS_WRITE) 
-                                    ? RESOURCE_KIND_STORAGE_TEXTURE 
-                                    : RESOURCE_KIND_TEXTURE;
-                outResource.set = static_cast<uint32_t>(bindingVar->getBindingSpace(slang::ParameterCategory::DescriptorTableSlot));
-                outResource.binding = static_cast<uint32_t>(bindingVar->getBindingIndex());
+                bool isWritable = (access == SLANG_RESOURCE_ACCESS_READ_WRITE ||
+                                   access == SLANG_RESOURCE_ACCESS_WRITE);
+        
+                SlangResourceShape baseShape = static_cast<SlangResourceShape>(
+                    typeLayout->getResourceShape() & SLANG_RESOURCE_BASE_SHAPE_MASK
+                );
+        
+                if (baseShape == SLANG_STRUCTURED_BUFFER || baseShape == SLANG_BYTE_ADDRESS_BUFFER) {
+                    outResource.kind = isWritable
+                        ? RESOURCE_KIND_STORAGE_BUFFER_RW
+                        : RESOURCE_KIND_STORAGE_BUFFER;
+                    hasStructMembers = (baseShape == SLANG_STRUCTURED_BUFFER);
+                } else {
+                    outResource.kind = isWritable
+                        ? RESOURCE_KIND_STORAGE_TEXTURE
+                        : RESOURCE_KIND_TEXTURE;
+                }
             }
-
-            // Now fill up CompactMembers
-            if (isPushConstant || isUniform) {
+        
+            // PushConstant, ConstantBuffer<T>, StructuredBuffer<T> 모두 내부 구조체 레이아웃 추출
+            if (hasStructMembers) {
                 slang::TypeLayoutReflection* elementLayout = typeLayout->getElementTypeLayout();
                 slang::TypeLayoutReflection* targetLayout = elementLayout ? elementLayout : typeLayout;
         
-                outResource.totalSize = static_cast<uint32_t>(targetLayout->getSize(slang::ParameterCategory::Uniform));
+                outResource.totalSize = static_cast<uint32_t>(
+                    targetLayout->getSize(slang::ParameterCategory::Uniform)
+                );
         
                 std::vector<CompactMember> memberList;
                 extractMemberRecursive(targetLayout, 0, -1, memberList);
@@ -422,7 +438,11 @@ namespace {
                 outResource.memberCount = static_cast<uint32_t>(memberList.size());
                 if (outResource.memberCount > 0) {
                     outResource.members = new CompactMember[outResource.memberCount];
-                    std::memcpy(outResource.members, memberList.data(), sizeof(CompactMember) * outResource.memberCount);
+                    std::memcpy(
+                        outResource.members,
+                        memberList.data(),
+                        sizeof(CompactMember) * outResource.memberCount
+                    );
                 } else {
                     outResource.members = nullptr;
                 }
