@@ -240,8 +240,7 @@ namespace {
     
                 CompactMember member = {};
                 member.name = error_util::duplicateString(rawName ? rawName : "");
-                member.offset = currentOffset + static_cast<uint32_t>(fieldVar->getOffset(SLANG_PARAMETER_CATEGORY_UNIFORM));
-                member.size = static_cast<uint32_t>(fieldType->getSize(SLANG_PARAMETER_CATEGORY_UNIFORM));
+                member.offset = currentOffset + static_cast<uint32_t>(fieldVar->getOffset(cat));
                 member.parentIndex = parentIdx;
                 member.scalarType = SCALAR_KIND_NONE;
 
@@ -268,10 +267,13 @@ namespace {
                         targetLayout = elemLayout;
                         kind = elemLayout->getKind();
                     }
+                    member.size = targetLayout ? static_cast<uint32_t>(targetLayout->getSize()) : 0;
                 } else if (kind == slang::TypeReflection::Kind::Struct) {
                     member.kind = MEMBER_KIND_STRUCT;  // Struct
+                    member.size = static_cast<uint32_t>(targetLayout->getSize());
                 } else {
                     member.kind = MEMBER_KIND_PRIMITIVE; // Primitive
+                    member.size = static_cast<uint32_t>(targetLayout->getSize());
                 }
 
                 // If primitive, capture the scalar type, row, and column
