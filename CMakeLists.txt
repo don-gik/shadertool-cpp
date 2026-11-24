@@ -20,21 +20,28 @@ endif()
 # PATH env variable
 find_program(SLANGC_EXECUTABLE slangc QUIET)
 if(SLANGC_EXECUTABLE)
-    get_filename_component(SLANG_BIN_DIR "${SLANGC_EXECUTABLE}" DIRECTORY)
-    get_filename_component(SLANG_PATH_ROOT "${SLANG_BIN_DIR}" DIRECTORY)
+    get_filename_component(_SLANG_REAL_EXE "${SLANGC_EXECUTABLE}" REALPATH)
+    get_filename_component(_SLANG_BIN_DIR "${_SLANG_REAL_EXE}" DIRECTORY)
+    get_filename_component(SLANG_PATH_ROOT "${_SLANG_BIN_DIR}" DIRECTORY)
 endif()
 
-set(_SLANG_HINTS
-    "${SLANG_ROOT}"
-    "$ENV{VULKAN_SDK}"
-    "${SLANG_PATH_ROOT}"
-    "/opt/shader-slang-bin"
-)
+set(_SLANG_HINTS "")
+if(SLANG_ROOT)
+    list(APPEND _SLANG_HINTS "${SLANG_ROOT}")
+endif()
+if(SLANG_PATH_ROOT)
+    list(APPEND _SLANG_HINTS "${SLANG_PATH_ROOT}")
+endif()
+if(DEFINED ENV{VULKAN_SDK} AND NOT "$ENV{VULKAN_SDK}" STREQUAL "")
+    list(APPEND _SLANG_HINTS "$ENV{VULKAN_SDK}")
+endif()
+if(UNIX AND NOT APPLE)
+    list(APPEND _SLANG_HINTS "/opt/shader-slang-bin")
+endif()
 
 # Search slang in root
 find_package(slang CONFIG QUIET
     HINTS ${_SLANG_HINTS}
-    PATH_SUFFIXES "lib/cmake/slang"
 )
 
 # Search up library files, too...
@@ -156,6 +163,24 @@ endif()
 
 # Set Install (for Rust cmake crate)
 include(GNUInstallDirs)
+
+if(SLANG_LIB_DIR)
+    file(GLOB SLANG_RUNTIME_LIBS
+        "${SLANG_LIB_DIR}/*slang*.so*"
+        "${SLANG_LIB_DIR}/*slang*.dylib"
+    )
+    if(SLANG_RUNTIME_LIBS)
+        install(FILES ${SLANG_RUNTIME_LIBS} DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    endif()
+endif()
+
+if(WIN32 AND SLANG_LIB_DIR)
+    get_filename_component(_SLANG_ROOT_GUESS "${SLANG_LIB_DIR}" DIRECTORY)
+    file(GLOB SLANG_DLLS "${_SLANG_ROOT_GUESS}/bin/*slang*.dll")
+    if(SLANG_DLLS)
+        install(FILES ${SLANG_DLLS} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
+endif()
 
 install(TARGETS shadertool
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
