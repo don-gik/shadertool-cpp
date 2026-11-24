@@ -17,12 +17,50 @@ if(NOT SLANG_ROOT AND DEFINED ENV{SLANG_ROOT})
     set(SLANG_ROOT "$ENV{SLANG_ROOT}")
 endif()
 
+# PATH env variable
+find_program(SLANGC_EXECUTABLE slangc QUIET)
+if(SLANGC_EXECUTABLE)
+    get_filename_component(SLANG_BIN_DIR "${SLANGC_EXECUTABLE}" DIRECTORY)
+    get_filename_component(SLANG_PATH_ROOT "${SLANG_BIN_DIR}" DIRECTORY)
+endif()
+
+set(_SLANG_HINTS
+    "${SLANG_ROOT}"
+    "$ENV{VULKAN_SDK}"
+    "${SLANG_PATH_ROOT}"
+    "/opt/shader-slang-bin"
+)
+
 # Search slang in root
 find_package(slang CONFIG QUIET
-    HINTS
-        "${SLANG_ROOT}"
-        "${SLANG_ROOT}/lib/cmake/slang"
+    HINTS ${_SLANG_HINTS}
+    PATH_SUFFIXES "lib/cmake/slang"
 )
+
+# Search up library files, too...
+# To prevent redundent downloading
+if(NOT slang_FOUND)
+    find_path(SLANG_INCLUDE_DIR
+        NAMES slang.h
+        HINTS ${_SLANG_HINTS}
+        PATH_SUFFIXES "include"
+    )
+    find_library(SLANG_LIBRARY
+        NAMES slang
+        HINTS ${_SLANG_HINTS}
+        PATH_SUFFIXES "lib" "lib64"
+    )
+
+    if(SLANG_INCLUDE_DIR AND SLANG_LIBRARY)
+        add_library(slang::slang UNKNOWN IMPORTED)
+        set_target_properties(slang::slang PROPERTIES
+            IMPORTED_LOCATION "${SLANG_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${SLANG_INCLUDE_DIR}"
+        )
+        set(slang_FOUND TRUE)
+        message(STATUS "[Slang] Using pre-installed Slang: ${SLANG_LIBRARY}")
+    endif()
+endif()
 
 # Download Slang
 if(NOT slang_FOUND)
